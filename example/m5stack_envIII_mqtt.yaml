@@ -1,0 +1,174 @@
+substitutions:
+  name: m5-cores3
+  friendly_name: m5-cores3
+  mqtt_prefix: esphome-mqtt/${friendly_name}
+  update_interval: 15s
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  name_add_mac_suffix: false
+  min_version: 2023.12.7
+  platformio_options:
+    board_build.flash_mode: dio
+    board_upload.maximum_size: 16777216
+  libraries:
+    - m5stack/M5Unified@^0.1.11
+  project:
+    name: m5stack.cores3
+    version: "1.0"
+
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  framework:
+    type: esp-idf  # We need esp-idf for MQTTS
+    sdkconfig_options:
+      # need to set a s3 compatible board for the adf-sdk to compile
+      # board specific code is not used though
+      CONFIG_ESP32_S3_BOX_BOARD: "y"
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"
+      CONFIG_ESP32S3_DATA_CACHE_64KB:      "y"
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B:  "y"
+
+      #CONFIG_LOG_DEFAULT_LEVEL_DEBUG: "y"
+      #CONFIG_LOG_DEFAULT_LEVEL: "4"
+
+psram:
+  mode: quad  # Need to check between quad and octal, one of these is "wrong"
+  speed: 80MHz
+
+# Add components from this project
+external_components:
+  - source:
+      # Local copy
+      type: local
+      path: /opt/components
+      # Alternatively use this repo directly
+      # type: git
+      # url: https://github.com/AmedeeBulle/ESPHome-M5StackCoreS3
+    components: [ m5stack_cores3, m5stack_cores3_touchscreen ]
+
+# Enable logging
+logger:
+  deassert_rts_dtr: true
+  level: DEBUG  # Verbose will be *very* verbose from the touch component!
+
+# Enable ESPHome API
+api:
+
+# Set up a wifi AP as fallback
+wifi:
+  ap: {}
+
+# In combination with the `ap` this allows the user
+# to provision wifi credentials to the device via WiFi AP.
+captive_portal:
+
+web_server:
+
+ota:
+
+# M5 Custom component will enable power on bus for sensors
+m5stack_cores3:
+  id: m5cores3
+  bus_out: true
+  lcd_brightness: 70
+
+# I2C Bus - Only declare the bus you need for the sensors.
+# Enabling more than one bus in ESPHome doesn't seem to work.
+# Internal bus is available to the M5Stack component
+i2c:
+  - id: i2c_port_a
+    sda: 2
+    scl: 1
+
+# Declare sensors
+sensor:
+  - platform: sht3xd
+    temperature:
+      name: "SHT Temperature"
+      id: sht_temp
+    humidity:
+      name: "SHT Humidity"
+      id: sht_humidity
+    i2c_id: i2c_port_a
+    address: 0x44
+    update_interval: ${update_interval}
+  - platform: qmp6988
+    temperature:
+      name: "QMP Temperature"
+      id: qmp_temp
+    pressure:
+      name: "QMP Pressure"
+      id: qmp_pres
+    iir_filter: 2x
+    i2c_id: i2c_port_a
+    address: 0x70
+    update_interval: ${update_interval}
+
+# MQTT publisher
+mqtt:
+  broker: !secret iot_mqtt_broker
+  username: !secret iot_mqtt_user
+  password: !secret iot_mqtt_password
+  port: !secret iot_mqtt_port
+  certificate_authority: !secret iot_ca_cert
+  topic_prefix: ${mqtt_prefix}
+  log_topic: 
+    topic: ${mqtt_prefix}/logs
+    retain: false
+    level: INFO
+
+# SPI Interface (Needed for the display)
+spi:
+  clk_pin: 36
+  mosi_pin: 37
+
+font:
+  - file: "gfonts://Roboto"
+    id: font_roboto_36
+    size: 36
+  - file: "gfonts://Roboto"
+    id: font_roboto_24
+    size: 18
+
+color:
+  - id: color_title
+    red: 100%
+    green: 0%
+    blue: 0%
+  - id: color_bg
+    red: 0%
+    green: 0%
+    blue: 50%
+  - id: color_fg
+    red: 100%
+    green: 100%
+    blue: 100%
+
+display:
+  - platform: ili9xxx
+    model: M5Stack
+    dimensions: 320x240
+    cs_pin: 3
+    dc_pin: 35
+    update_interval: ${update_interval}
+    lambda: |-
+      auto bg = id(color_bg);
+      auto fg = id(color_fg);
+      it.fill(bg);
+      it.print(0, 0, id(font_roboto_36), id(color_title), TextAlign::TOP_LEFT, "M5Stack ESPHome");
+      it.printf(0, 50, id(font_roboto_24), fg, TextAlign::TOP_LEFT, "SHT Temperature: %.1f°C", id(sht_temp).state);
+      it.printf(0, 75, id(font_roboto_24), fg, TextAlign::TOP_LEFT, "SHT Humidity: %.1f%%", id(sht_humidity).state);
+      it.printf(0, 100, id(font_roboto_24), fg, TextAlign::TOP_LEFT, "QMP Temperature: %.1f°C", id(qmp_temp).state);
+      it.printf(0, 125, id(font_roboto_24), fg, TextAlign::TOP_LEFT, "QMP Pressure: %.1fhPa", id(qmp_pres).state);
+
+# Use touch to turn on/off the LCD display
+touchscreen:
+  - platform: m5stack_cores3_touchscreen
+    update_interval: 50ms
+    on_touch:
+      then:
+        - logger.log: "Clicked!"
+        - lambda: "id(m5cores3)->toggle_lcd();"
