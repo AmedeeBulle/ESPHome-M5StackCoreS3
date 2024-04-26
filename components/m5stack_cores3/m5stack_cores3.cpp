@@ -52,5 +52,15 @@ void M5StackCoreS3::toggle_lcd() {
     this->lcd_on_ = ! this->lcd_on_;
 }
 
+void M5StackCoreS3::lcd_on() {
+    M5.Display.setBrightness(this->lcd_initial_brightness_);
+    this->lcd_on_ = true;
+}
+
+void M5StackCoreS3::lcd_off() {
+    M5.Display.setBrightness(0);
+    this->lcd_on_ = false;
+}
+
 }  // namespace m5stack_cores3
 }  // namespace esphome

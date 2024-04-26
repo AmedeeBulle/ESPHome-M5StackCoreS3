@@ -17,6 +17,8 @@ public:
     void set_bus_out(bool flag) { this->bus_out_ = flag; }
     void set_lcd_brightness(uint8_t value) { this->lcd_brightness_ = value; }
     void toggle_lcd();
+    void lcd_on();
+    void lcd_off();
 
 protected:
     bool bus_out_{true};
